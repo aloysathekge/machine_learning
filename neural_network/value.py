@@ -39,3 +39,25 @@ class Value:
             self.grad+=(1-t**2)*out.grad
         out._backward=_backward
         return out
+    
+    def backward(self):
+         #Build topological order of all nodes
+         topo=[]
+         visited =set()
+
+         def build_topo(v):
+            if v not in visited:
+                visited.add(v)
+                for child in v._prev:
+                    build_topo(child)
+                topo.append(v)
+
+         build_topo(self)
+
+         # Backpropagation gradeints in reverse order
+
+         self.grad=1.0
+
+         for node in reversed(topo):
+            node._backward()
+
