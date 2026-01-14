@@ -1,7 +1,5 @@
-from ast import Lambda
-from turtle import backward
 
-
+import math
 class Value:
    def __init__(self,data,_children=(),_op=''):
     self.data=data
@@ -39,5 +37,5 @@ class Value:
         def _backward():
             #d(tanh(x))/dx=1-tanh**2(x)
             self.grad+=(1-t**2)*out.grad
-        out._backward=backward
+        out._backward=_backward
         return out
