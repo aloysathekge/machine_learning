@@ -22,35 +22,29 @@ optimizer=optim.Adam(model.parameters(),lr=0.1)
 x_train=torch.tensor([[2.0],[3.0],[4.0],[5.0]])
 y_train=3*x_train +1
 
-#Training Loop 
-
-epochs=1000
-
-for epoch in range(epochs):
+def training_loop(model,optimizer,input,labels, loss_fn):
     model.train()
 
-    #forward pass
-    predictions=model(x_train)
+    optimizer.zero_grad()
 
-    # compute loss
+    predictions=model(input)
 
-    loss=criterion(predictions, y_train)
+    loss=loss_fn(predictions,labels)
 
-    #backpropagation
+    loss.backward()
 
-    optimizer.zero_grad() # erase old gradient info
+    optimizer.step()
+    return loss
 
-    loss.backward()   # compute new gradients
+epochs=1000
+total_loss=0
+for epoch in range(epochs):
+  loss= training_loop(model, optimizer,x_train,y_train,criterion)
+  total_loss += loss.item()
+  if epoch % 10==0:
+    print(f"Epoch : {epoch}, Loss:{loss.item():.4f}")
 
-    optimizer.step()  # update weights
-
-    
-    # check every 10 epochs
-
-    if epoch % 10==0:
-        print(f"Epoch: {epoch}, Loss: {loss.item():.4f}")
-
-
+print(f"Average  Loss {total_loss/epochs:.4f}") 
 # Test the model:
 
 model.eval()
