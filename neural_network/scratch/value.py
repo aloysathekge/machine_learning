@@ -35,6 +35,11 @@ class Value:
         return self * other
 
 
+    
+   
+
+
+
     def tanh(self):
         x=self.data
         t=(math.exp(2*x)-1)/(math.exp(2*x) +1)
@@ -44,7 +49,32 @@ class Value:
             #d(tanh(x))/dx=1-tanh**2(x)
             self.grad+=(1-t**2)*out.grad
         out._backward=_backward
+
         return out
+    
+    def relu(self):
+        #Relu: max(0,x)
+
+        out = Value(max(0,self.data),(self,),"Relu")
+
+        def _backward():
+            self.grad +=(1.0 if self.data>0 else 0.0)*out.grad
+        out._backward=_backward
+        return out
+
+
+    
+    def sigmoid(self):
+        x=self.data
+        s= 1/(1+math.exp(-x))
+        out=Value(s,(self,),'sigmoid')
+
+        def _backward():
+            self.grad+=(s*(1+s))*out.grad
+        out._backward=_backward
+        return out
+
+    
 
     def backward(self):
             #Build topological order of all nodes
@@ -68,7 +98,7 @@ class Value:
              node._backward()
 
 x =Value(5.0)
-f=x*2 + x+x+x #x**2 +3x
-f.backward()
-print(f"f({x.data})= {f.data}")
-print(f"df/dx= {x.grad}")
+b=Value(-2.0)
+f=x + b#x**2 +3x
+print(x.relu().data)
+print(b.relu().data)
