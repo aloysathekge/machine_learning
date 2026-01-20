@@ -1,32 +1,45 @@
 import random
 from value import Value
-from engine import Module, Neuron, Layer, MLP
+from engine import SGD, MSELoss, Module, Neuron, Layer, MLP
 
-x=[Value(2.0),Value(3.0),Value(-1.0)]
-# layer=Layer(3, 4)
 
-mlp=MLP(3,[4,4,1])
-print(mlp)
+# Train on y = 2x + 1
+xs = [[Value(1.0)], [Value(2.0)], [Value(3.0)], [Value(4.0)]]
+ys = [Value(3.0), Value(5.0), Value(7.0), Value(9.0)]
 
-out=mlp(x)
-print(f"mlp output:{out.data}")
-print(f"Total parameters: {len(mlp.parameters())}")
+mlp=MLP(1,[4,1])
 
-# Backward pass
-out.backward()
-print(f"First parameter gradient: {mlp.parameters()[0].grad:.4f}")
-# Zero grad
-mlp.zero_grad()
-print(f"After zero_grad: {mlp.parameters()[0].grad}")
+optimizer = SGD(mlp.parameters(), lr=0.01)
+criterion =MSELoss()
 
-# 4. Compute loss (example: want output to be 1.0)
-target = Value(1.0)
-loss = (out - target) ** 2  # Mean squared error
-print(loss.data)
+for epoch in range(1000):
+    optimizer.zero_grad()
+    #forward
+    preds=[mlp(x) for x in xs]
+    loss=criterion(preds,ys)
 
-loss.backward()
 
-for p in mlp.parameters():
-    p.data-=0.01 *p.grad
+    #backward
+    loss.backward()
 
-mlp.zero_grad()
+    optimizer.step()
+
+    if epoch %10==0:
+        print(f"Epoch {epoch} , loss :{loss.data:.4f}")
+
+print("\n--- Predictions ---")
+
+for x,y in zip(xs,ys):
+    pred=mlp(x)
+    print(f"x={x[0].data:.1f} -> predicted={pred.data:.2f}, actual={y.data:.2f}")
+
+
+#Test on new data (model never saw these!)
+print("\nNew data (y=2x+1):")
+test_inputs=[5.0,6.0,10.0,0.00,100.0,11.0,3.4,8.1]
+
+for x_val in test_inputs:
+    x=[Value(x_val)]
+    pred=mlp(x)
+    actual=2*x_val+1
+    print(f"x={x_val:.1f} -> predicted={pred.data:.2f}, actual={actual:.2f}")

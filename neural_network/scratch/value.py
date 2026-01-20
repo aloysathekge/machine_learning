@@ -33,8 +33,8 @@ class Value:
     def __neg__(self):
         return self*-1
     
-    def __sub__(self,other):
-        return self+(-other)
+   
+
     
     def __truediv__(self, other): # self / other
         return self * other**-1
