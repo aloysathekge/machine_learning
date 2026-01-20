@@ -19,15 +19,22 @@ class Value:
         out._backward=_backward
         return out
     def __sub__(self, other):
-        out=Value(self.data +(- other.data))
-        return out
+        return self +(-other)
     
     def __rsub__(self,other):
-        out=Value(other.data +(-self.data))
-        return out
+         other = other if isinstance(other, Value) else Value(other)
+         return other +(-self)
+
     def __radd__(self,other):
-        out=Value(other.data+self.data)
+
+        other = other if isinstance(other, Value) else Value(other)
+        return self +other
     
+    def __neg__(self):
+        return self*-1
+    
+    def __sub__(self,other):
+        return self+(-other)
     
     def __truediv__(self, other): # self / other
         return self * other**-1
