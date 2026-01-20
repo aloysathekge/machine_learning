@@ -1,5 +1,5 @@
 import random
-from scratch.value import Value
+from value import Value
 
 
 class Module:
@@ -19,7 +19,7 @@ class Neuron():
         self.nonlin=nonlin
     
     def __call__(self,x) :
-        act=sum((wi*xi for wi,xi in zip(self.w,x)),self.b))
+        act=sum((wi*xi for wi,xi in zip(self.w,x)),self.b)
 
         return act.relu() if self.nonlin else act
     def parameters(self):
