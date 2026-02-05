@@ -1,0 +1,508 @@
+"""
+PyTorch Data Pipeline: Complete Guide
+======================================
+
+This guide covers everything about preparing data for PyTorch models:
+1. Dataset vs DataLoader
+2. Built-in datasets
+3. Custom datasets
+4. Data transformations
+5. Efficient data loading
+6. Common patterns and best practices
+"""
+
+import torch
+from torch.utils.data import Dataset, DataLoader, random_split
+from torchvision import transforms, datasets
+import numpy as np
+from PIL import Image
+import os
+
+print("="*70)
+print("PART 1: DATASET vs DATALOADER - The Basics")
+print("="*70)
+
+"""
+KEY CONCEPT:
+- Dataset: Stores your data (images, labels, etc.) and knows how to get individual samples
+- DataLoader: Wraps a Dataset and handles batching, shuffling, parallel loading
+
+Think of it like:
+- Dataset = Your photo album (knows where each photo is)
+- DataLoader = Your friend who grabs photos in batches and shuffles them
+"""
+
+# Example 1: Simple custom dataset
+class SimpleDataset(Dataset):
+    """
+    Every custom Dataset must implement 3 methods:
+    - __init__: Initialize your data
+    - __len__: Return the total number of samples
+    - __getitem__: Return one sample at index idx
+    """
+    def __init__(self, data, labels):
+        self.data = data
+        self.labels = labels
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        # This is called when you do dataset[idx]
+        return self.data[idx], self.labels[idx]
+
+# Create dummy data
+dummy_data = torch.randn(100, 3, 32, 32)  # 100 images, 3 channels, 32x32
+dummy_labels = torch.randint(0, 10, (100,))  # 100 labels (0-9)
+
+dataset = SimpleDataset(dummy_data, dummy_labels)
+
+print(f"Dataset size: {len(dataset)}")
+print(f"First sample shape: {dataset[0][0].shape}")
+print(f"First label: {dataset[0][1]}")
+
+# Now wrap it in a DataLoader
+dataloader = DataLoader(
+    dataset,
+    batch_size=16,      # Get 16 samples at a time
+    shuffle=True,       # Shuffle data each epoch
+    num_workers=0       # Number of parallel workers (0 = main thread)
+)
+
+print(f"\nDataLoader batches: {len(dataloader)}")
+print("First batch:")
+for images, labels in dataloader:
+    print(f"  Batch images shape: {images.shape}")  # [16, 3, 32, 32]
+    print(f"  Batch labels shape: {labels.shape}")  # [16]
+    break  # Just show first batch
+
+print("\n" + "="*70)
+print("PART 2: TRANSFORMS - Data Augmentation & Preprocessing")
+print("="*70)
+
+"""
+Transforms modify your data on-the-fly:
+- Preprocessing: Resize, normalize, convert to tensor
+- Augmentation: Random flips, rotations, crops (for training)
+"""
+
+# Common transform pipeline for images
+train_transform = transforms.Compose([
+    transforms.Resize((224, 224)),           # Resize to 224x224
+    transforms.RandomHorizontalFlip(p=0.5),  # 50% chance to flip
+    transforms.RandomRotation(15),           # Rotate ±15 degrees
+    transforms.ColorJitter(brightness=0.2, contrast=0.2),  # Random color
+    transforms.ToTensor(),                   # Convert PIL to tensor [0,1]
+    transforms.Normalize(                    # Normalize with ImageNet stats
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225]
+    )
+])
+
+# Test transform (no augmentation, only preprocessing)
+test_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225]
+    )
+])
+
+print("Train transforms (with augmentation):")
+print(train_transform)
+print("\nTest transforms (preprocessing only):")
+print(test_transform)
+
+print("\n" + "="*70)
+print("PART 3: CUSTOM DATASET - Images from Folder")
+print("="*70)
+
+"""
+Real-world scenario: You have images in folders like:
+data/
+  train/
+    cats/
+      cat1.jpg, cat2.jpg, ...
+    dogs/
+      dog1.jpg, dog2.jpg, ...
+  test/
+    cats/
+    dogs/
+"""
+
+class ImageFolderDataset(Dataset):
+    """Load images from a folder structure"""
+    
+    def __init__(self, root_dir, transform=None):
+        """
+        Args:
+            root_dir: Path to data (e.g., 'data/train')
+            transform: Optional transforms to apply
+        """
+        self.root_dir = root_dir
+        self.transform = transform
+        self.images = []
+        self.labels = []
+        self.class_to_idx = {}
+        
+        # Scan directories
+        classes = sorted(os.listdir(root_dir)) if os.path.exists(root_dir) else []
+        
+        for idx, class_name in enumerate(classes):
+            self.class_to_idx[class_name] = idx
+            class_dir = os.path.join(root_dir, class_name)
+            
+            if os.path.isdir(class_dir):
+                for img_name in os.listdir(class_dir):
+                    if img_name.endswith(('.jpg', '.jpeg', '.png')):
+                        self.images.append(os.path.join(class_dir, img_name))
+                        self.labels.append(idx)
+    
+    def __len__(self):
+        return len(self.images)
+    
+    def __getitem__(self, idx):
+        # Load image
+        img_path = self.images[idx]
+        image = Image.open(img_path).convert('RGB')
+        label = self.labels[idx]
+        
+        # Apply transforms
+        if self.transform:
+            image = self.transform(image)
+        
+        return image, label
+
+print("Custom ImageFolderDataset class created!")
+print("Usage:")
+print("  dataset = ImageFolderDataset('data/train', transform=train_transform)")
+print("  loader = DataLoader(dataset, batch_size=32, shuffle=True)")
+
+print("\n" + "="*70)
+print("PART 4: EFFICIENT DATA LOADING - Performance Tips")
+print("="*70)
+
+"""
+Key parameters for DataLoader efficiency:
+"""
+
+# OPTION 1: Single worker (simple but slow)
+slow_loader = DataLoader(
+    dataset,
+    batch_size=32,
+    shuffle=True,
+    num_workers=0  # Everything in main process
+)
+
+# OPTION 2: Multiple workers (faster, parallel loading)
+fast_loader = DataLoader(
+    dataset,
+    batch_size=32,
+    shuffle=True,
+    num_workers=4,      # 4 parallel processes loading data
+    pin_memory=True,    # Faster GPU transfer (use if you have GPU)
+    prefetch_factor=2,  # Each worker pre-loads 2 batches
+    persistent_workers=True  # Keep workers alive between epochs
+)
+
+print("Slow DataLoader (num_workers=0):")
+print("  - Simple, easy to debug")
+print("  - Data loading happens in main thread")
+print("  - GPU waits for data")
+print()
+print("Fast DataLoader (num_workers=4, pin_memory=True):")
+print("  - 4 workers load data in parallel")
+print("  - pin_memory speeds up CPU→GPU transfer")
+print("  - GPU rarely waits for data")
+print()
+print("Rule of thumb for num_workers:")
+print("  - CPU training: num_workers = 2-4")
+print("  - GPU training: num_workers = 4-8 (or num CPU cores)")
+print("  - Start with 4, adjust based on GPU utilization")
+
+print("\n" + "="*70)
+print("PART 5: TRAIN/VAL/TEST SPLIT")
+print("="*70)
+
+"""
+Split your dataset properly:
+- Training set: Train the model
+- Validation set: Tune hyperparameters, early stopping
+- Test set: Final evaluation (use only once!)
+"""
+
+# Method 1: Using random_split
+full_dataset = SimpleDataset(dummy_data, dummy_labels)
+train_size = int(0.7 * len(full_dataset))
+val_size = int(0.15 * len(full_dataset))
+test_size = len(full_dataset) - train_size - val_size
+
+train_dataset, val_dataset, test_dataset = random_split(
+    full_dataset, 
+    [train_size, val_size, test_size],
+    generator=torch.Generator().manual_seed(42)  # Reproducible split
+)
+
+print(f"Dataset splits:")
+print(f"  Train: {len(train_dataset)} samples")
+print(f"  Val:   {len(val_dataset)} samples")
+print(f"  Test:  {len(test_dataset)} samples")
+
+# Create dataloaders for each split
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+
+print("\nKey differences:")
+print("  - Train loader: shuffle=True (different order each epoch)")
+print("  - Val/Test loaders: shuffle=False (consistent order)")
+
+print("\n" + "="*70)
+print("PART 6: WORKING WITH DIFFERENT DATA TYPES")
+print("="*70)
+
+# Example 1: CSV/Tabular data
+class CSVDataset(Dataset):
+    """For tabular data (like CSV files)"""
+    
+    def __init__(self, csv_file):
+        # In practice, use pandas: pd.read_csv(csv_file)
+        # Here's a simplified version
+        self.data = np.random.randn(1000, 10)  # 1000 samples, 10 features
+        self.labels = np.random.randint(0, 2, 1000)  # Binary labels
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        features = torch.FloatTensor(self.data[idx])
+        label = torch.LongTensor([self.labels[idx]])[0]
+        return features, label
+
+# Example 2: Text data
+class TextDataset(Dataset):
+    """For text/NLP tasks"""
+    
+    def __init__(self, texts, labels, vocab, max_len=100):
+        self.texts = texts
+        self.labels = labels
+        self.vocab = vocab  # word to index mapping
+        self.max_len = max_len
+    
+    def __len__(self):
+        return len(self.texts)
+    
+    def __getitem__(self, idx):
+        text = self.texts[idx]
+        label = self.labels[idx]
+        
+        # Convert words to indices
+        indices = [self.vocab.get(word, 0) for word in text.split()]
+        
+        # Pad or truncate to max_len
+        if len(indices) < self.max_len:
+            indices += [0] * (self.max_len - len(indices))
+        else:
+            indices = indices[:self.max_len]
+        
+        return torch.LongTensor(indices), torch.LongTensor([label])[0]
+
+print("Custom dataset classes for different data types:")
+print("  - CSVDataset: For tabular/numerical data")
+print("  - TextDataset: For NLP tasks")
+print("  - ImageFolderDataset: For images (see Part 3)")
+
+print("\n" + "="*70)
+print("PART 7: BUILT-IN DATASETS (PyTorch/TorchVision)")
+print("="*70)
+
+"""
+TorchVision provides many popular datasets out of the box
+"""
+
+# MNIST
+mnist_train = datasets.MNIST(
+    root='./data',
+    train=True,
+    download=True,
+    transform=transforms.ToTensor()
+)
+
+# CIFAR-10
+cifar_train = datasets.CIFAR10(
+    root='./data',
+    train=True,
+    download=True,
+    transform=transforms.ToTensor()
+)
+
+# ImageNet (requires manual download)
+# imagenet = datasets.ImageNet(root='./data', split='train')
+
+print("Built-in datasets available:")
+print("  - MNIST: 70k grayscale 28x28 digit images")
+print("  - CIFAR10: 60k color 32x32 images, 10 classes")
+print("  - CIFAR100: 60k color 32x32 images, 100 classes")
+print("  - ImageNet: 1.2M+ images, 1000 classes (manual download)")
+print("  - Fashion-MNIST, SVHN, STL10, and many more!")
+
+print("\n" + "="*70)
+print("PART 8: COMMON PATTERNS & BEST PRACTICES")
+print("="*70)
+
+print("""
+✅ BEST PRACTICES:
+
+1. ALWAYS use different transforms for train vs test:
+   - Train: Augmentation (flips, rotations, crops)
+   - Test: Only preprocessing (resize, normalize)
+
+2. Normalize your data:
+   - Images: Use ImageNet stats or compute your own
+   - Tabular: Standardize (mean=0, std=1) or MinMax scale
+
+3. Set num_workers properly:
+   - Start with 4
+   - Monitor GPU utilization (should be >90%)
+   - Increase if GPU is waiting for data
+
+4. Use pin_memory=True if you have a GPU:
+   - Faster CPU→GPU data transfer
+   - Only works with CUDA
+
+5. Shuffle training data, don't shuffle test data:
+   - train_loader: shuffle=True
+   - val/test_loader: shuffle=False
+
+6. Use persistent_workers=True for large datasets:
+   - Keeps workers alive between epochs
+   - Avoids worker restart overhead
+
+7. Batch size tips:
+   - Larger = faster training but more GPU memory
+   - Start with 32 or 64
+   - Powers of 2 are often faster (16, 32, 64, 128)
+
+8. Always use a validation set:
+   - Don't touch test set until final evaluation
+   - Use val set for hyperparameter tuning
+
+9. Set random seeds for reproducibility:
+   - torch.manual_seed(42)
+   - np.random.seed(42)
+   - Use generator in random_split
+
+10. Cache transformed data if transforms are slow:
+    - Pre-compute transforms and save to disk
+    - Load cached versions in __getitem__
+""")
+
+print("\n" + "="*70)
+print("PART 9: COMPLETE TRAINING LOOP EXAMPLE")
+print("="*70)
+
+def training_loop_example():
+    """Complete example of using data pipeline in training"""
+    
+    # 1. Prepare datasets
+    train_transform = transforms.Compose([
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,))
+    ])
+    
+    test_transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,))
+    ])
+    
+    train_dataset = datasets.MNIST(
+        root='./data', 
+        train=True, 
+        download=True, 
+        transform=train_transform
+    )
+    
+    test_dataset = datasets.MNIST(
+        root='./data', 
+        train=False, 
+        download=True, 
+        transform=test_transform
+    )
+    
+    # 2. Create dataloaders
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=64,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True
+    )
+    
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=64,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True
+    )
+    
+    print("Data pipeline ready!")
+    print(f"  Train batches: {len(train_loader)}")
+    print(f"  Test batches: {len(test_loader)}")
+    
+    # 3. Training loop structure
+    print("\nTraining loop structure:")
+    print("""
+    for epoch in range(num_epochs):
+        model.train()
+        for images, labels in train_loader:
+            images, labels = images.to(device), labels.to(device)
+            
+            # Forward pass
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            
+            # Backward pass
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        
+        # Validation
+        model.eval()
+        with torch.no_grad():
+            for images, labels in val_loader:
+                images, labels = images.to(device), labels.to(device)
+                outputs = model(images)
+                # Calculate validation metrics
+    """)
+
+print("Running example...")
+training_loop_example()
+
+print("\n" + "="*70)
+print("SUMMARY: Data Pipeline Checklist")
+print("="*70)
+print("""
+□ Create Dataset class (implement __len__ and __getitem__)
+□ Define transforms (different for train/test)
+□ Split data (train/val/test)
+□ Create DataLoaders with appropriate parameters:
+  □ batch_size (32-128)
+  □ shuffle (True for train, False for test)
+  □ num_workers (4-8)
+  □ pin_memory (True if using GPU)
+□ Test your pipeline:
+  □ Check batch shapes
+  □ Visualize samples
+  □ Verify transforms work correctly
+□ Optimize for speed if needed:
+  □ Increase num_workers
+  □ Use persistent_workers
+  □ Profile data loading time
+""")
+
+print("\n" + "="*70)
+print("Guide complete! You now understand PyTorch data pipelines 🚀")
+print("="*70)
